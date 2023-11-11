@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from colorama import Fore, Style
+import tqdm
 
 def pixel_unshuffle(x, scale):
     b, c, hh, hw = x.size()
@@ -251,6 +252,9 @@ class RRDBNet(nn.Module):
 
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
+    def interpolate(self, feat):
+        return nn.functional.interpolate(feat, scale_factor=2, mode='nearest')
+
     def forward(self, x):
         if self.scale == 2:
             feat = pixel_unshuffle(x, scale=2)
@@ -258,12 +262,27 @@ class RRDBNet(nn.Module):
             feat = pixel_unshuffle(x, scale=4)
         else:
             feat = x
+        
         feat = self.conv_first(feat)
-        body_feat = self.conv_body(self.body(feat))
-        feat = feat + body_feat
-        feat = self.lrelu(self.conv_up1(nn.functional.interpolate(feat, scale_factor=2, mode='nearest')))
-        feat = self.lrelu(self.conv_up2(nn.functional.interpolate(feat, scale_factor=2, mode='nearest')))
-        out = self.conv_last(self.lrelu(self.conv_hr(feat)))
+        pipelines = [layer for layer in self.body]
+        pipelines.extend([
+            self.conv_body,
+            lambda x : x + feat,
+            self.interpolate,
+            self.conv_up1,
+            self.lrelu,
+            self.interpolate,
+            self.conv_up2,
+            self.lrelu,
+            self.conv_hr,
+            self.lrelu,
+            self.conv_last
+        ])
+        
+        out = feat
+        for layer_fn in tqdm.tqdm(pipelines, ncols=80, colour='green', desc='rebuilding'):
+            out = layer_fn(out)
+                
         return out
 
 def resize(img : np.ndarray, height=None, width=None) -> np.ndarray:
@@ -333,14 +352,14 @@ def main(img_path : str, out_path: str, model_path: str, device: str, scale=4, o
         out_img_path = out_path
     else:
         out_img_path = "{}.out.{}".format(img_name, ext_name)
-    print(out_img.shape)
+    print('Rebuild Image\'s shape', Fore.YELLOW, out_img.shape, Style.RESET_ALL)
     b = out_img[..., 0]
     g = out_img[..., 1]
     r = out_img[..., 2]
     out_img = np.stack([r, g, b], axis=2)
     Image.fromarray(out_img).save(out_img_path)
     cost_time = round(time.time() - s, 2)
-    print('Super resolution result saved to', Fore.GREEN, out_img_path, Style.RESET_ALL, 'cost {} s'.format(cost_time))   
+    print('Result saved to', Fore.GREEN, out_img_path, Style.RESET_ALL, 'cost {} s'.format(cost_time))   
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -6,7 +6,7 @@
 
 ```bash
 $ git clone https://github.com/LSTM-Kirigaya/super-easy-super-resolution
-$ pip install opencv-python numpy pillow torch colorama
+$ pip install opencv-python numpy pillow torch colorama tqdm
 ```
 
 🙌 Super easy usage
