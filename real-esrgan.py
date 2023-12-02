@@ -287,7 +287,7 @@ class RRDBNet(nn.Module):
         else:
             yield len(pipelines)
             out = feat
-            for layer_fn in tqdm.tqdm(pipelines, ncols=80, colour='green', desc='rebuilding'):
+            for layer_fn in pipelines:
                 yield out
                 out = layer_fn(out)
             

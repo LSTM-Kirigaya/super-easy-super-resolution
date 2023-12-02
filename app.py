@@ -48,7 +48,7 @@ left_section, right_section = st.columns(spec=2)
 ## progress bar
 if file_uploader and os.path.exists(save_path):
     with st.sidebar:
-        progress_bar = st.progress(value=0., text='rebuilding')
+        progress_bar = st.progress(value=0, text='rebuilding')
 
 ## section for input image
 with left_section:
@@ -67,14 +67,20 @@ with right_section:
                 total_stages = output + 1
             if isinstance(output, torch.Tensor):
                 count += 1
-                percent = round(count / total_stages * 100, 3)
-                progress_bar.progress(value=min(count / total_stages, 1.0), text=f'rebuilding ({percent * 100}%)')
-                print(count, total_stages, min(count / total_stages, 1.0))
+                percent = int(count / total_stages * 100)
+                progress_bar.progress(value=percent, text=f'rebuilding ({percent}%)')
+                print(count, total_stages, percent)
                 
             if hasattr(output, 'save'):
-                progress_bar.progress(value=1., text='bingo 😎')
+                progress_bar.progress(value=100, text='bingo 😎')
                 result_save_path_file = f'{save_path}.rebuild.png'
+                # delete other images
+                for image in os.listdir(cache_dir):
+                    if image != save_path:
+                        os.remove(os.path.join(cache_dir, image))
+                        
                 output.save(result_save_path_file)
+                    
                 st.image(result_save_path_file, caption='rebuild image', use_column_width='always')
                 with open(result_save_path_file, 'rb') as fp:
                     st.download_button(label='Download', data=fp, file_name='rebuild.png', mime='image/png')
