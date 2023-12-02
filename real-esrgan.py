@@ -255,7 +255,7 @@ class RRDBNet(nn.Module):
     def interpolate(self, feat):
         return nn.functional.interpolate(feat, scale_factor=2, mode='nearest')
 
-    def forward(self, x):
+    def forward(self, x: torch.FloatTensor, mode: str='command'):
         if self.scale == 2:
             feat = pixel_unshuffle(x, scale=2)
         elif self.scale == 1:
@@ -279,11 +279,19 @@ class RRDBNet(nn.Module):
             self.conv_last
         ])
         
-        out = feat
-        for layer_fn in tqdm.tqdm(pipelines, ncols=80, colour='green', desc='rebuilding'):
-            out = layer_fn(out)
-                
-        return out
+        if mode == 'command':
+            out = feat
+            for layer_fn in tqdm.tqdm(pipelines, ncols=80, colour='green', desc='rebuilding'):
+                out = layer_fn(out)
+            return out
+        else:
+            yield len(pipelines)
+            out = feat
+            for layer_fn in tqdm.tqdm(pipelines, ncols=80, colour='green', desc='rebuilding'):
+                yield out
+                out = layer_fn(out)
+            
+            yield out
 
 def resize(img : np.ndarray, height=None, width=None) -> np.ndarray:
     if height is None and width is None:
@@ -342,12 +350,13 @@ def main(img_path : str, out_path: str, model_path: str, device: str, scale=4, o
     
     out_img = out_img * 255
     out_img = out_img.round().astype('uint8')
-
+    
     if outscale is not None:
         out_img = resize(out_img, height=int(h * outscale))
 
     img_full_name = os.path.split(img_path)[-1]
-    img_name, ext_name = img_full_name.split(".")
+    img_name, ext_name = img_full_name.split(".")[0], img_full_name.split(".")[-1]
+    
     if out_path != '-1':
         out_img_path = out_path
     else:
@@ -360,6 +369,55 @@ def main(img_path : str, out_path: str, model_path: str, device: str, scale=4, o
     Image.fromarray(out_img).save(out_img_path)
     cost_time = round(time.time() - s, 2)
     print('Result saved to', Fore.GREEN, out_img_path, Style.RESET_ALL, 'cost {} s'.format(cost_time))   
+
+
+_model_instance = None
+def load_model_from_cache(device, model_path):
+    global _model_instance
+    if _model_instance is None:
+        model_state_dict = torch.load(model_path)
+        model = RRDBNet(
+            num_in_ch=3,
+            num_out_ch=3,
+            num_feat=64,
+            num_block=6,
+            num_grow_ch=32,
+            scale=4
+        )
+        model.load_state_dict(model_state_dict)
+        _model_instance = model
+        
+    model = _model_instance.to(device)
+    return model    
+
+def streamlit_main(img_path, device: str, model_path):
+    model = load_model_from_cache(device, model_path)
+    model.eval()
+
+    img = Image.open(img_path).convert('RGB')
+    img = np.array(img) / 255
+    h = img.shape[0]
+    w = img.shape[1]
+    img = torch.FloatTensor(img.transpose((2, 0, 1))).unsqueeze(0).to(device)
+    
+    s = time.time()
+    with torch.no_grad():
+        for output in model(img, mode='streamlit'):
+            yield output
+
+    out_img = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
+    out_img = out_img[[2, 1, 0], :, :].transpose((1, 2, 0))
+    out_img = out_img * 255
+    out_img = out_img.round().astype('uint8')
+    
+    b = out_img[..., 0]
+    g = out_img[..., 1]
+    r = out_img[..., 2]
+    out_img = np.stack([r, g, b], axis=2)
+    cost_time = round(time.time() - s, 2)
+
+    yield Image.fromarray(out_img)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
