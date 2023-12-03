@@ -53,11 +53,10 @@ if device:
 left_section, right_section = st.columns(spec=2)
 
 ## section for input image
-with left_section:
-    if file_uploader and os.path.exists(save_path):
-        st.image(image=save_path, caption='input image', use_column_width='always')
-    else:
-        st.info('Wait for image to upload. Click Browse files!')
+if file_uploader and os.path.exists(save_path):
+    left_section.image(image=save_path, caption='input image', use_column_width='always')
+else:
+    left_section.info('Wait for image to upload. Click Browse files!')
 
 ## section for output image
 if file_uploader and os.path.exists(save_path):
@@ -72,14 +71,10 @@ if file_uploader and os.path.exists(save_path):
             os.remove(os.path.join(cache_dir, image))
     output.save(result_save_path_file)
             
-    with right_section:
-        st.image(result_save_path_file, caption='rebuild image', use_column_width='always')
-        
-        with st.sidebar:
-            with open(result_save_path_file, 'rb') as fp:
-                st.download_button(label='Download', data=fp, file_name='rebuild.png', mime='image/png')
+    right_section.image(result_save_path_file, caption='rebuild image', use_column_width='always')    
+    with open(result_save_path_file, 'rb') as fp:
+        st.sidebar.download_button(label='Download', data=fp, file_name='rebuild.png', mime='image/png')
 else:
-    with right_section:
-        st.info('Generate image is empty.')
+    right_section.info('Generate image is empty.')
 
 
