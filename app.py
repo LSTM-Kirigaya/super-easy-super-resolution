@@ -60,10 +60,10 @@ else:
 
 ## section for output image
 if file_uploader and os.path.exists(save_path):
-    with st.sidebar:
-        st.markdown('---')
-        output = esrgan.streamlit_main(save_path, device, 'model.bin')
     
+    st.sidebar.markdown('---')
+    output = esrgan.streamlit_main(save_path, device, 'model.bin')
+
     result_save_path_file = f'{save_path}.rebuild.png'
     # delete other images
     for image in os.listdir(cache_dir):

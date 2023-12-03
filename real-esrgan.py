@@ -281,8 +281,7 @@ class RRDBNet(nn.Module):
         ])
         
         if mode != 'command':
-            with st.sidebar:
-                progress_bar = st.progress(value=0, text='rebuilding')
+            progress_bar = st.sidebar.progress(value=0, text='rebuilding')
         
         count = 0        
         out = feat
@@ -293,7 +292,7 @@ class RRDBNet(nn.Module):
                 percent = int(count / len(pipelines) * 100)
                 progress_bar.progress(value=percent, text=f'rebuilding ({percent}%)')
         
-        progress_bar.progress('Bingo 🐳. Just Download')
+        progress_bar.progress(value=100, text='Bingo 🐳. Just Download')
         return out
 
 
