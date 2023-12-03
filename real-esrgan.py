@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from colorama import Fore, Style
 import tqdm
+import streamlit as st
 
 def pixel_unshuffle(x, scale):
     b, c, hh, hw = x.size()
@@ -279,19 +280,22 @@ class RRDBNet(nn.Module):
             self.conv_last
         ])
         
-        if mode == 'command':
-            out = feat
-            for layer_fn in tqdm.tqdm(pipelines, ncols=80, colour='green', desc='rebuilding'):
-                out = layer_fn(out)
-            return out
-        else:
-            yield len(pipelines)
-            out = feat
-            for layer_fn in pipelines:
-                yield out
-                out = layer_fn(out)
-            
-            yield out
+        if mode != 'command':
+            with st.sidebar:
+                progress_bar = st.progress(value=0, text='rebuilding')
+        
+        count = 0        
+        out = feat
+        for layer_fn in tqdm.tqdm(pipelines, ncols=80, colour='green', desc='rebuilding'):
+            out = layer_fn(out)
+            if mode != 'command':
+                count += 1
+                percent = int(count / len(pipelines) * 100)
+                progress_bar.progress(value=percent, text=f'rebuilding ({percent}%)')
+        
+        progress_bar.progress('Bingo 🐳. Just Download')
+        return out
+
 
 def resize(img : np.ndarray, height=None, width=None) -> np.ndarray:
     if height is None and width is None:
@@ -372,7 +376,9 @@ def main(img_path : str, out_path: str, model_path: str, device: str, scale=4, o
 
 
 _model_instance = None
-def load_model_from_cache(device, model_path):
+
+@st.cache_resource
+def load_model_from_cache(model_path):
     global _model_instance
     if _model_instance is None:
         model_state_dict = torch.load(model_path)
@@ -387,11 +393,12 @@ def load_model_from_cache(device, model_path):
         model.load_state_dict(model_state_dict)
         _model_instance = model
         
-    model = _model_instance.to(device)
     return model    
 
+@st.cache_data
 def streamlit_main(img_path, device: str, model_path):
-    model = load_model_from_cache(device, model_path)
+    model = load_model_from_cache(model_path)
+    model = model.to(device)
     model.eval()
 
     img = Image.open(img_path).convert('RGB')
@@ -400,11 +407,9 @@ def streamlit_main(img_path, device: str, model_path):
     w = img.shape[1]
     img = torch.FloatTensor(img.transpose((2, 0, 1))).unsqueeze(0).to(device)
     
-    s = time.time()
     with torch.no_grad():
-        for output in model(img, mode='streamlit'):
-            yield output
-
+        output = model(img, mode='streamlit')
+        
     out_img = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
     out_img = out_img[[2, 1, 0], :, :].transpose((1, 2, 0))
     out_img = out_img * 255
@@ -414,9 +419,8 @@ def streamlit_main(img_path, device: str, model_path):
     g = out_img[..., 1]
     r = out_img[..., 2]
     out_img = np.stack([r, g, b], axis=2)
-    cost_time = round(time.time() - s, 2)
 
-    yield Image.fromarray(out_img)
+    return Image.fromarray(out_img)
 
 
 if __name__ == '__main__':

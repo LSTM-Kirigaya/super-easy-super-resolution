@@ -19,6 +19,12 @@ st.set_page_config(
     layout='wide'
 )
 
+
+@st.cache_data
+def save_image(file_id: int):
+    save_path = os.path.join(cache_dir, file_id + '.png')
+    open(save_path, 'wb').write(file_uploader.read())
+
 ## make side bar
 with st.sidebar:
     st.title('esr-gan')
@@ -45,10 +51,6 @@ if device:
     
 ## make main section (two column, one for input image render, one for output one)
 left_section, right_section = st.columns(spec=2)
-## progress bar
-if file_uploader and os.path.exists(save_path):
-    with st.sidebar:
-        progress_bar = st.progress(value=0, text='rebuilding')
 
 ## section for input image
 with left_section:
@@ -58,32 +60,26 @@ with left_section:
         st.info('Wait for image to upload. Click Browse files!')
 
 ## section for output image
-with right_section:
-    if file_uploader and os.path.exists(save_path):
-        count = 0
-        total_stages = 100
-        for output in esrgan.streamlit_main(save_path, device, 'model.bin'):
-            if isinstance(output, int):
-                total_stages = output + 1
-            if isinstance(output, torch.Tensor):
-                count += 1
-                percent = int(count / total_stages * 100)
-                progress_bar.progress(value=percent, text=f'rebuilding ({percent}%)')
-                print(count, total_stages, percent)
-                
-            if hasattr(output, 'save'):
-                progress_bar.progress(value=100, text='bingo 😎')
-                result_save_path_file = f'{save_path}.rebuild.png'
-                # delete other images
-                for image in os.listdir(cache_dir):
-                    if image != save_path:
-                        os.remove(os.path.join(cache_dir, image))
-                        
-                output.save(result_save_path_file)
-                    
-                st.image(result_save_path_file, caption='rebuild image', use_column_width='always')
-                with open(result_save_path_file, 'rb') as fp:
-                    st.download_button(label='Download', data=fp, file_name='rebuild.png', mime='image/png')
+if file_uploader and os.path.exists(save_path):
+    with st.sidebar:
+        st.markdown('---')
+        output = esrgan.streamlit_main(save_path, device, 'model.bin')
     
-    else:
+    result_save_path_file = f'{save_path}.rebuild.png'
+    # delete other images
+    for image in os.listdir(cache_dir):
+        if image != save_path:
+            os.remove(os.path.join(cache_dir, image))
+    output.save(result_save_path_file)
+            
+    with right_section:
+        st.image(result_save_path_file, caption='rebuild image', use_column_width='always')
+        
+        with st.sidebar:
+            with open(result_save_path_file, 'rb') as fp:
+                st.download_button(label='Download', data=fp, file_name='rebuild.png', mime='image/png')
+else:
+    with right_section:
         st.info('Generate image is empty.')
+
+
